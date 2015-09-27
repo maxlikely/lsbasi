@@ -1,8 +1,11 @@
+import operator
+import string
+
 # Token types
 #
 # EOF (end-of-file) token is used to indicate that
 # there is no more input left for lexical analysis
-INTEGER, PLUS, EOF = 'INTEGER', 'PLUS', 'EOF'
+INTEGER, PLUS, MINUS, EOF = 'INTEGER', 'PLUS', 'MINUS', 'EOF'
 
 
 class Token(object):
@@ -46,7 +49,17 @@ class Interpreter(object):
         This method is responsible for breaking a sentence
         apart into tokens. One token at a time.
         """
-        text = self.text
+        text = self.text.rstrip() # remove trailing whitespace
+
+        def fast_forward(chars_to_fast_forward_past):
+            for pos in xrange(self.pos, len(text)):
+                self.pos = pos
+                if text[pos] not in chars_to_fast_forward_past:
+                    return
+            self.pos += 1
+
+        # fast-forward to non-whitespace
+        fast_forward(string.whitespace)
 
         # is self.pos index past the end of the self.text ?
         # if so, then return EOF token because there is no more
@@ -63,12 +76,20 @@ class Interpreter(object):
         # index to point to the next character after the digit,
         # and return the INTEGER token
         if current_char.isdigit():
-            token = Token(INTEGER, int(current_char))
-            self.pos += 1
+            digit_start = self.pos
+            fast_forward(string.digits)
+            digit = text[digit_start:self.pos]
+            token = Token(INTEGER, int(digit))
+            # no need for self.pos += 1 because fast forwarding does that
             return token
 
         if current_char == '+':
-            token = Token(PLUS, current_char)
+            token = Token(PLUS, operator.add)
+            self.pos += 1
+            return token
+
+        if current_char == '-':
+            token = Token(MINUS, operator.sub)
             self.pos += 1
             return token
 
@@ -85,7 +106,7 @@ class Interpreter(object):
             self.error()
 
     def expr(self):
-        """expr -> INTEGER PLUS INTEGER"""
+        """expr -> INTEGER [PLUS/MINUS] INTEGER"""
         # set current token to the first token taken from the input
         self.current_token = self.get_next_token()
 
@@ -93,9 +114,9 @@ class Interpreter(object):
         left = self.current_token
         self.eat(INTEGER)
 
-        # we expect the current token to be a '+' token
+        # we expect the current token to be a '+' or '-' token
         op = self.current_token
-        self.eat(PLUS)
+        self.eat(op.type)
 
         # we expect the current token to be a single-digit integer
         right = self.current_token
@@ -103,11 +124,11 @@ class Interpreter(object):
         # after the above call the self.current_token is set to
         # EOF token
 
-        # at this point INTEGER PLUS INTEGER sequence of tokens
+        # at this point INTEGER [PLUS/MINUS] INTEGER sequence of tokens
         # has been successfully found and the method can just
-        # return the result of adding two integers, thus
+        # return the result of adding or subtracting two integers, thus
         # effectively interpreting client input
-        result = left.value + right.value
+        result = op.value(left.value, right.value)
         return result
 
 
